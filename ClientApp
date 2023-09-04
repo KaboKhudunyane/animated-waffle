@@ -1,0 +1,284 @@
+package ClientApp;
+
+import java.awt.BorderLayout;
+import java.awt.GridLayout;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.net.Socket;
+import java.util.ArrayList;
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import pojo.Student;
+
+public class ClientApp implements ActionListener 
+{
+    JFrame frame;
+    JPanel infoPanel, buttonPanel, textPanel;
+    JLabel nameLabel, idLabel, scoreLabel;
+    JTextField nameTextField, idTextField, scoreTextField, searchTextField;
+    JButton addButton, retrieveButton, exitButton, searchButton;
+    JTextArea textArea;
+    
+    Socket socket;
+    ObjectOutputStream oos;
+    ObjectInputStream ois;
+    
+    Student student;
+    ArrayList studentList, searchList;
+    
+    public ClientApp() 
+    {
+        frame = new JFrame("Student Record Management");
+        
+        infoPanel = new JPanel();
+        infoPanel.setLayout(new GridLayout(4,2));
+        buttonPanel = new JPanel();
+        textPanel = new JPanel(); 
+        
+        nameLabel = new JLabel("Name:");
+        idLabel = new JLabel("ID:");
+        scoreLabel = new JLabel("Score:");
+
+        nameTextField = new JTextField(15);
+        idTextField = new JTextField(15);
+        scoreTextField = new JTextField(15);
+        searchTextField = new JTextField(15);
+
+        addButton = new JButton("Add");
+        retrieveButton = new JButton("Retrieve");
+        exitButton = new JButton("Exit");
+        searchButton = new JButton("Search");
+        addButton.addActionListener(this);
+        retrieveButton.addActionListener(this);
+        exitButton.addActionListener(this);
+        searchButton.addActionListener(this);
+
+        textArea = new JTextArea(10, 30);
+        textArea.setEditable(false);
+    }
+    
+    public void setGUI() 
+    {
+        infoPanel.add(nameLabel);
+        infoPanel.add(nameTextField);
+        infoPanel.add(idLabel);
+        infoPanel.add(idTextField);
+        infoPanel.add(scoreLabel);
+        infoPanel.add(scoreTextField);
+        infoPanel.add(searchTextField);
+        infoPanel.add(searchButton);
+
+        buttonPanel.add(addButton);
+        buttonPanel.add(retrieveButton);
+        buttonPanel.add(exitButton);
+
+        textPanel.add(textArea);
+
+        frame.add(infoPanel, BorderLayout.NORTH);
+        frame.add(textPanel, BorderLayout.CENTER);
+        frame.add(buttonPanel, BorderLayout.SOUTH); 
+        
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(400, 300);
+        frame.setLocationRelativeTo(null);
+        frame.setVisible(true);
+    }
+    
+    public void clearFields() 
+    {
+        nameTextField.setText("");
+        idTextField.setText("");
+        scoreTextField.setText("");
+        searchTextField.setText("");
+        nameTextField.hasFocus();
+    }
+    
+    public boolean isInputValid() 
+    {
+        boolean valid = true;
+
+        if(nameTextField.getText().equals(""))
+        {
+            valid = false;
+        }
+        if(idTextField.getText().equals(""))
+        {
+            valid = false;
+        }
+        if(scoreTextField.getText().equals(""))
+        {
+            valid = false;
+        }
+        return valid;
+    }
+    
+    public void createConnection()
+    {
+        try 
+        {
+            // Connect to the server running on localhost at port 12345
+            socket = new Socket("localhost", 12345);
+            System.out.println("Connection established");
+        } 
+        catch (IOException ioe) 
+        {
+            System.out.println("Error connecting to server: " + ioe.getMessage());
+        }
+    }
+    public void getStreams() 
+    {
+        try 
+        {
+            // Initialize ObjectOutputStream to send data to the server
+            oos = new ObjectOutputStream(socket.getOutputStream());
+            oos.flush();
+            
+            // Initialize ObjectInputStream to receive data from the server
+            ois = new ObjectInputStream(socket.getInputStream());
+            System.out.println("Streams obtained");
+        } 
+        catch (IOException ioe) 
+        {
+            System.out.println("Error establishing streams! " + ioe.getMessage());
+        }
+    }
+    public void addStudentRecord() 
+    {
+        String name = nameTextField.getText();
+        String id = idTextField.getText();
+        String score = scoreTextField.getText();
+        
+        student = new Student(name, id, score);
+        
+        try
+        {
+            // Send the student object to the server
+            oos.writeObject(student);
+            oos.flush();
+            System.out.println("Student added");
+        }
+        catch (IOException ioe)
+        {
+                System.out.println("Error adding student record! " + ioe.getMessage());
+        }
+        clearFields();
+    }
+    public void retrieveStudentRecords()
+    {
+        try 
+        {
+            // Send "Retrieve" to request student records from the server
+            oos.writeObject("Retrieve");
+            oos.flush();
+            
+            // Receive the list of students from the server
+            studentList = (ArrayList<Student>) ois.readObject();  
+            
+            System.out.println("List of students" + studentList);
+            
+            // Display the list of students in the GUI text area
+            textArea.append(studentList +"\n"); 
+        } 
+        catch (IOException ioe) 
+        {
+            System.out.println("Error retrieving Student records! " + ioe.getMessage());
+        }
+        catch(ClassNotFoundException cnfe)
+        {
+            System.out.println("Class not found! " + cnfe.getMessage());
+        }
+    }
+    public void searchStudentRecords() 
+    {
+        String query = searchTextField.getText();
+        try 
+        {
+            // Send the search query to the server
+            oos.writeObject(query);
+
+            // Receive the search results from the server
+            Object response = ois.readObject();
+            searchList = (ArrayList<Student>) response;
+            
+            // Display the search results in the GUI
+            textArea.setText("Student Records:\n");
+            for (int i = 0; i > searchList.size(); i++)
+            {
+                textArea.append(student.toString() + "\n");
+            }
+        } 
+        catch (IOException e) {
+            e.printStackTrace();
+        } 
+        catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+    }
+    
+    public void closeStreams() 
+    {
+        try {
+            // Send "Exit" to the server to request closing the connection
+            oos.writeObject("Exit");
+            ois.read();
+            oos.close();
+            oos.flush();
+            ois.close();
+
+            // Close the socket and exit the client application
+            socket.close();
+            System.exit(0);
+            System.out.println("Streams closed");
+        } catch (IOException ioe) {
+            System.out.println("Error closing streams and socket: " + ioe.getMessage());
+        }
+    }
+    @Override
+    public void actionPerformed(ActionEvent e) 
+    {
+        if (e.getSource().equals(addButton)) 
+        {
+            if (isInputValid()) 
+            {
+                // Add a student record to the server
+                addStudentRecord();
+                textArea.append("");
+            } 
+            else 
+            {
+                JOptionPane.showMessageDialog(null, "Please fill in all fields before adding");
+            }
+        }
+        if (e.getSource().equals(retrieveButton)) 
+        {
+            // Retrieve student records from the server
+            retrieveStudentRecords();
+        }
+        if (e.getSource().equals(searchButton)) 
+        {
+            // Search for student records on the server
+            searchStudentRecords();
+        }
+        if (e.getSource().equals(exitButton)) 
+        {
+            // Close streams and exit the client application
+            closeStreams();
+            System.exit(0);
+        }
+    }   
+    public static void main(String[] args) 
+    {
+        ClientApp clientApp = new ClientApp();
+        clientApp.setGUI();
+        clientApp.createConnection();
+        clientApp.getStreams();
+    }    
+}
