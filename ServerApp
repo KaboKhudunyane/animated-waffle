@@ -1,0 +1,125 @@
+package serverapp;
+
+import pojo.Student;
+
+import java.io.*;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.ArrayList;
+
+public class ServerApp {
+
+    ServerSocket serverSocket;
+    Socket clientSocket;
+    ObjectOutputStream oos;
+    ObjectInputStream ois;
+    ArrayList<Student> studentArrayList, searchResultList;
+
+    public ServerApp() {
+        try {
+            // Create a server socket and listen on port 12345
+            serverSocket = new ServerSocket(12345);
+            System.out.println("Server is listening on port 12345");
+
+            // Accept a client connection
+            clientSocket = serverSocket.accept();
+            System.out.println("Client connected");
+
+            // Initialize streams and process client requests
+            getStreams();
+            processClient();
+        } 
+        catch (IOException ioe) {
+            System.out.println("Error connecting to client! " + ioe.getMessage());
+        }
+    }
+
+    public void getStreams() {
+        try {
+            // Initialize ObjectOutputStream to send data to the client
+            oos = new ObjectOutputStream(clientSocket.getOutputStream());
+            oos.flush();
+
+            // Initialize ObjectInputStream to receive data from the client
+            ois = new ObjectInputStream(clientSocket.getInputStream());
+            System.out.println("Streams obtained");
+        } 
+        catch (IOException ioe) {
+            System.out.println("Error establishing streams! " + ioe.getMessage());
+        }
+    }
+
+    public void processClient() {
+        studentArrayList = new ArrayList<>();
+
+        while (true) {
+            try {
+                // Read an object from the client
+                Object receivedObject = ois.readObject();
+
+                if (receivedObject instanceof Student) {
+                    // If received object is a Student, add it to the list
+                    Student newStudent = (Student) receivedObject;
+                    studentArrayList.add(newStudent);
+                    System.out.println("Student added");
+                } 
+                else if (receivedObject instanceof String && ((String) receivedObject).equals("Retrieve")) {
+                    // If received object is "Retrieve," send the student list back to the client
+                    oos.writeObject(studentArrayList);
+                    oos.flush();
+                    System.out.println("Students retrieved");
+                } 
+                else if (receivedObject instanceof String && ((String) receivedObject).equals("Exit")) {
+                    // If received object is "Exit," close streams and exit the server
+                    closeStreams();
+                    System.out.println("Streams closed");
+                } 
+                else
+                {
+                    // Otherwise, it's a search query, so search for students and send results
+                    String query = (String) receivedObject;
+                    searchResultList = searchStudents(query);
+                    oos.writeObject(searchResultList);
+                    oos.flush();
+                }
+            } 
+            catch (IOException | ClassNotFoundException e) {
+                System.out.println("Error processing client! " + e.getMessage());
+            }
+        }
+    }
+
+    public ArrayList<Student> searchStudents(String query) {
+        
+        searchResultList = new ArrayList<>();
+
+        for (Student student : studentArrayList) {
+            // Search for students whose ID, name, or score contains the query (case-insensitive)
+            if (student.getId().toLowerCase().contains(query.toLowerCase())
+                    || student.getName().toLowerCase().contains(query.toLowerCase())
+                    || student.getScore().toLowerCase().contains(query.toLowerCase())) {
+                searchResultList.add(student);
+            }
+        }
+        return searchResultList;
+    }
+
+    public void closeStreams() {
+        try {
+            // Send "Exiting" to the client, close streams, sockets, and exit the server
+            oos.writeObject("Exiting");
+            oos.flush();
+            ois.close();
+            oos.close();
+            clientSocket.close();
+            serverSocket.close();
+            System.exit(0);
+        } catch (IOException ioe) {
+            System.out.println("Error closing streams! " + ioe.getMessage());
+        }
+    }
+
+    public static void main(String[] args) {
+        ServerApp serverApp = new ServerApp();
+    }
+}
